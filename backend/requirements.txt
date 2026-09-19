@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+transformers
+torch
+google-generativeai
+pandas
+python-multipart
+pydantic
+pydantic-settings
