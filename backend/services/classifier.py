@@ -40,32 +40,39 @@ class SentimentClassifier:
             "sentiment": "Positive" if positive_prob > negative_prob else "Negative"
         }
         
-    def predict_batch(self, texts: List[str]) -> List[Dict[str, Union[float, str]]]:
-        """Predicts sentiment for a batch of texts."""
+    def predict_batch(self, texts: List[str], batch_size: int = 32) -> List[Dict[str, Union[float, str]]]:
+        """Predicts sentiment in chunks to avoid GPU/CPU OOM on large files."""
         if not texts:
             return []
-            
-        tokenized_texts = self.tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
-        
-        input_ids = tokenized_texts.input_ids.to(self.device)
-        attention_mask = tokenized_texts.attention_mask.to(self.device)
 
-        with torch.no_grad():
-            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-            logits = outputs.logits
+        results: List[Dict[str, Union[float, str]]] = []
+        for start in range(0, len(texts), batch_size):
+            chunk = texts[start:start + batch_size]
+            tokenized_texts = self.tokenizer(
+                chunk,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=256,
+            )
 
-        probs = F.softmax(logits, dim=1)
-        
-        results = []
-        for prob in probs:
-            pos_p = prob[1].item()
-            neg_p = prob[0].item()
-            results.append({
-                "positive_probability": pos_p,
-                "negative_probability": neg_p,
-                "sentiment": "Positive" if pos_p > neg_p else "Negative"
-            })
-            
+            input_ids = tokenized_texts.input_ids.to(self.device)
+            attention_mask = tokenized_texts.attention_mask.to(self.device)
+
+            with torch.no_grad():
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                logits = outputs.logits
+
+            probs = F.softmax(logits, dim=1)
+            for prob in probs:
+                pos_p = prob[1].item()
+                neg_p = prob[0].item()
+                results.append({
+                    "positive_probability": pos_p,
+                    "negative_probability": neg_p,
+                    "sentiment": "Positive" if pos_p > neg_p else "Negative",
+                })
+
         return results
 
 # Create a singleton instance to be used across the app

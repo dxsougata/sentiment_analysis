@@ -15,9 +15,10 @@ import SentimentDonutChart from '../components/charts/SentimentDonutChart';
 import CategoryBreakdownChart from '../components/charts/CategoryBreakdownChart';
 import SentimentTrendChart from '../components/charts/SentimentTrendChart';
 import { formatNumber, formatDate } from '../utils/formatters';
+import NeedAnalysis from '../components/common/NeedAnalysis';
 
 export default function AnalysisPage() {
-  const { stats, reviews, categories, trend, activeDatasetName } = useAnalysis();
+  const { stats, reviews, categories, trend, activeDatasetName, hasAnalysis } = useAnalysis();
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,6 +71,15 @@ export default function AnalysisPage() {
     setCategoryFilter('all');
     setSortBy('newest');
   };
+
+  if (!hasAnalysis) {
+    return (
+      <NeedAnalysis
+        title="No reviews to inspect"
+        description="Run an analysis on a CSV to see polarity, categories, and individual comments."
+      />
+    );
+  }
 
   return (
     <div>

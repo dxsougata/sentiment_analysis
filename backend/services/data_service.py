@@ -1,64 +1,151 @@
 import pandas as pd
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from io import BytesIO
 
+
+def _lower_col_map(columns) -> Dict[str, str]:
+    return {str(c).strip().lower(): c for c in columns}
+
+
+def _pick_column(col_lower: Dict[str, str], aliases: List[str]) -> Optional[str]:
+    for alias in aliases:
+        if alias in col_lower:
+            return col_lower[alias]
+    return None
+
+
 class DataService:
+    TEXT_ALIASES = [
+        "review_text",
+        "reviews.text",
+        "review.text",
+        "reviewtext",
+        "customer_review",
+        "customer_reviews",
+        "comment",
+        "comments",
+        "feedback",
+        "text",
+        "review",
+        "content",
+        "body",
+    ]
+
+    PRODUCT_ALIASES = [
+        "product_id",
+        "productid",
+        "product",
+        "asin",
+        "sku",
+        "item_id",
+        "id",
+    ]
+
+    DATE_ALIASES = [
+        "date",
+        "review_date",
+        "reviews.date",
+        "created_at",
+        "timestamp",
+        "time",
+    ]
+
+    RATING_ALIASES = [
+        "rating",
+        "reviews.rating",
+        "stars",
+        "score",
+        "star_rating",
+    ]
+
     @staticmethod
     def parse_csv(file_bytes: bytes) -> List[Dict[str, Any]]:
         """
-        Parses a CSV file containing at least Product_ID and Review_Text columns.
-        Returns a list of dictionaries.
+        Parses a CSV with a review-text column (and optional product, date, rating).
+        Returns a list of dictionaries with product_id, review_text, date, rating.
         """
-        df = pd.read_csv(BytesIO(file_bytes))
-        
-        # We need to ensure required columns exist. We can try to be flexible with naming.
-        # Check for typical column names for product ID and review text
-        
-        col_lower = {c.lower(): c for c in df.columns}
-        
-        product_col = None
-        if 'product_id' in col_lower: product_col = col_lower['product_id']
-        elif 'product' in col_lower: product_col = col_lower['product']
-        elif 'asin' in col_lower: product_col = col_lower['asin'] # Amazon specific
-        elif 'id' in col_lower: product_col = col_lower['id']
-        
-        text_col = None
-        if 'review_text' in col_lower: text_col = col_lower['review_text']
-        elif 'review.text' in col_lower: text_col = col_lower['review.text']
-        elif 'text' in col_lower: text_col = col_lower['text']
-        elif 'review' in col_lower: text_col = col_lower['review']
-        
+        last_error = None
+        df = None
+        for kwargs in (
+            {"encoding": "utf-8", "encoding_errors": "replace", "low_memory": False},
+            {"encoding": "latin-1", "low_memory": False},
+            {"encoding": "utf-8-sig", "encoding_errors": "replace", "low_memory": False},
+        ):
+            try:
+                df = pd.read_csv(BytesIO(file_bytes), **kwargs)
+                break
+            except Exception as exc:
+                last_error = exc
+
+        if df is None:
+            raise ValueError(f"Could not read the CSV file: {last_error}")
+
+        if df.empty:
+            raise ValueError("The CSV file has no data rows.")
+
+        col_lower = _lower_col_map(df.columns)
+
+        text_col = _pick_column(col_lower, DataService.TEXT_ALIASES)
+        product_col = _pick_column(col_lower, DataService.PRODUCT_ALIASES)
+        date_col = _pick_column(col_lower, DataService.DATE_ALIASES)
+        rating_col = _pick_column(col_lower, DataService.RATING_ALIASES)
+
         if not text_col:
-            raise ValueError("Could not find a column containing review text. Expected 'Review_Text', 'Text', or 'Review'.")
-            
+            names = ", ".join(str(c) for c in df.columns)
+            raise ValueError(
+                "Could not find a review text column. "
+                "Use Review_Text, Text, Review, Comment, or Feedback. "
+                f"Found columns: {names}"
+            )
+
+        if product_col == text_col:
+            product_col = None
+
         if not product_col:
-            # If no product ID, we assume all reviews belong to a single "Unknown Product"
-            df['Product_ID'] = 'Unknown Product'
-            product_col = 'Product_ID'
-            
-        # Select only the needed columns and drop NA text
-        df = df[[product_col, text_col]].dropna(subset=[text_col])
-        df = df.rename(columns={product_col: 'product_id', text_col: 'review_text'})
-        
-        # Convert all product IDs and text to string
-        df['product_id'] = df['product_id'].astype(str)
-        df['review_text'] = df['review_text'].astype(str)
-        
-        return df.to_dict(orient='records')
-        
+            df["Product_ID"] = "Unknown Product"
+            product_col = "Product_ID"
+
+        keep = [product_col, text_col]
+        if date_col:
+            keep.append(date_col)
+        if rating_col and rating_col not in keep:
+            keep.append(rating_col)
+
+        df = df[keep].dropna(subset=[text_col])
+        rename = {product_col: "product_id", text_col: "review_text"}
+        if date_col:
+            rename[date_col] = "date"
+        if rating_col:
+            rename[rating_col] = "rating"
+        df = df.rename(columns=rename)
+
+        df["product_id"] = df["product_id"].astype(str)
+        df["review_text"] = df["review_text"].astype(str).str.strip()
+        df = df[df["review_text"].str.len() > 0]
+
+        if "date" in df.columns:
+            df["date"] = df["date"].astype(str)
+        else:
+            df["date"] = ""
+
+        if "rating" in df.columns:
+            df["rating"] = df["rating"].astype(str)
+        else:
+            df["rating"] = ""
+
+        if df.empty:
+            raise ValueError("No valid review rows remained after cleaning empty text.")
+
+        return df[["product_id", "review_text", "date", "rating"]].to_dict(orient="records")
+
     @staticmethod
-    def group_by_product(records: List[Dict[str, Any]]) -> Dict[str, List[str]]:
-        """
-        Groups reviews by product ID.
-        Returns a dictionary: { "product_id": ["review 1", "review 2"] }
-        """
-        grouped = {}
+    def group_by_product(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """Groups full review records by product ID."""
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
         for record in records:
-            pid = record['product_id']
-            text = record['review_text']
-            if pid not in grouped:
-                grouped[pid] = []
-            grouped[pid].append(text)
+            pid = record["product_id"]
+            grouped.setdefault(pid, []).append(record)
         return grouped
+
 
 data_service = DataService()

@@ -13,16 +13,20 @@ import PriorityBadge from '../components/common/PriorityBadge';
 import Modal from '../components/common/Modal';
 import EmptyState from '../components/common/EmptyState';
 import { formatDate } from '../utils/formatters';
+import NeedAnalysis from '../components/common/NeedAnalysis';
 
 export default function IssuesPage() {
-  const { issues, stats } = useAnalysis();
+  const { issues, stats, hasAnalysis } = useAnalysis();
 
   const [selectedIssue, setSelectedIssue] = useState(null);
-  const [priorityFilter, setPriorityFilter] = useState('all'); // 'all' | 'high' | 'medium' | 'low'
+  const [priorityFilter, setPriorityFilter] = useState('all');
   const [issueSearch, setIssueSearch] = useState('');
-
-  // Modal search term for supporting quotes
   const [quoteSearch, setQuoteSearch] = useState('');
+
+  const topIssue = issues[0];
+  const highCount = issues.filter((i) => i.priority === 'High').length;
+  const mediumCount = issues.filter((i) => i.priority === 'Medium').length;
+  const lowCount = issues.filter((i) => i.priority === 'Low').length;
 
   const filteredIssues = useMemo(() => {
     return issues.filter((issue) => {
@@ -50,6 +54,15 @@ export default function IssuesPage() {
       item.review.toLowerCase().includes(q)
     );
   }, [selectedIssue, quoteSearch]);
+
+  if (!hasAnalysis) {
+    return (
+      <NeedAnalysis
+        title="No issues to cluster"
+        description="Upload reviews first. Negative comments are grouped by topic from the live model output."
+      />
+    );
+  }
 
   return (
     <div>
@@ -84,10 +97,12 @@ export default function IssuesPage() {
         <div className="kpi-card" style={{ borderLeft: '4px solid #ef4444' }}>
           <span className="kpi-label">Highest Impact Bottleneck</span>
           <div className="kpi-value-row" style={{ marginTop: '0.5rem' }}>
-            <span className="kpi-value" style={{ fontSize: '1.25rem' }}>Delivery Delays</span>
+            <span className="kpi-value" style={{ fontSize: '1.25rem' }}>
+              {topIssue ? topIssue.title : 'None'}
+            </span>
           </div>
           <span className="kpi-trend" style={{ color: 'var(--negative)' }}>
-            50.3% of all negative sentiment
+            {topIssue ? `${topIssue.shareOfNegative}% of negative sentiment` : 'No negative clusters'}
           </span>
         </div>
 
@@ -96,7 +111,9 @@ export default function IssuesPage() {
           <div className="kpi-value-row" style={{ marginTop: '0.5rem' }}>
             <span className="kpi-value">{issues.length} Identified</span>
           </div>
-          <span className="kpi-trend">2 High Priority • 2 Medium • 1 Low</span>
+          <span className="kpi-trend">
+            {highCount} High • {mediumCount} Medium • {lowCount} Low
+          </span>
         </div>
       </div>
 

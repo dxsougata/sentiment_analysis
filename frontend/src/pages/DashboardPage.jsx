@@ -18,9 +18,19 @@ import SentimentDonutChart from '../components/charts/SentimentDonutChart';
 import CategoryBreakdownChart from '../components/charts/CategoryBreakdownChart';
 import SentimentTrendChart from '../components/charts/SentimentTrendChart';
 import { formatNumber, formatDate } from '../utils/formatters';
+import NeedAnalysis from '../components/common/NeedAnalysis';
 
 export default function DashboardPage() {
-  const { stats, categories, trend, issues, history, activeDatasetName } = useAnalysis();
+  const { stats, categories, trend, issues, history, activeDatasetName, hasAnalysis } = useAnalysis();
+
+  if (!hasAnalysis) {
+    return (
+      <NeedAnalysis
+        title="No dataset loaded"
+        description="Upload a customer-review CSV to see KPIs, charts, and issue clusters from DistilBERT — not demo numbers."
+      />
+    );
+  }
 
   return (
     <div>
@@ -50,7 +60,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
           <FileCheck2 size={18} />
           <span>
-            Active Dataset: <strong>{activeDatasetName}</strong> (Simulated Mock Engine — Real backend API ready for plug-in).
+            Active dataset: <strong>{activeDatasetName || 'None'}</strong> — live DistilBERT results from your last upload.
           </span>
         </div>
         <Link to="/upload" style={{ color: 'inherit', fontWeight: 600, textDecoration: 'underline' }}>
@@ -63,7 +73,7 @@ export default function DashboardPage() {
         <KPICard
           label="Total Feedback"
           value={formatNumber(stats.totalFeedback)}
-          trendText="+12.4% vs last month"
+          trendText="This upload"
           trendType="positive"
           icon={MessageSquare}
           variant="primary"
@@ -73,7 +83,7 @@ export default function DashboardPage() {
           label="Positive Sentiment"
           value={formatNumber(stats.positiveCount)}
           percentage={`${stats.positivePercent}%`}
-          trendText="+4.1% customer praise"
+          trendText="Share of this batch"
           trendType="positive"
           icon={ThumbsUp}
           variant="positive"
@@ -83,7 +93,7 @@ export default function DashboardPage() {
           label="Neutral Sentiment"
           value={formatNumber(stats.neutralCount)}
           percentage={`${stats.neutralPercent}%`}
-          trendText="Informational queries"
+          trendText="Low-confidence / mixed"
           trendType="neutral"
           icon={Minus}
           variant="neutral"
@@ -139,7 +149,7 @@ export default function DashboardPage() {
           </div>
           <div className="badge badge-category">
             <Calendar size={13} style={{ marginRight: 4 }} />
-            Last 6 Weeks
+            Dates in this file
           </div>
         </div>
         <div className="card-body" style={{ height: '280px' }}>
@@ -164,6 +174,11 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="card-body" style={{ padding: '1rem' }}>
+            {issues.length === 0 ? (
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', margin: 0 }}>
+                No negative clusters in this batch.
+              </p>
+            ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
               {issues.slice(0, 3).map((issue) => (
                 <div
@@ -191,6 +206,7 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         </div>
 
@@ -217,7 +233,14 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {history.slice(0, 4).map((item) => (
+                  {history.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+                        This session has no prior uploads yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    history.slice(0, 4).map((item) => (
                     <tr key={item.id}>
                       <td style={{ fontWeight: 600, fontSize: '0.8125rem' }}>
                         {item.filename}
@@ -234,7 +257,8 @@ export default function DashboardPage() {
                         </span>
                       </td>
                     </tr>
-                  ))}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

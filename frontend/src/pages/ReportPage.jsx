@@ -15,6 +15,8 @@ import {
 import { useAnalysis } from '../hooks/useAnalysis';
 import PriorityBadge from '../components/common/PriorityBadge';
 import { formatNumber } from '../utils/formatters';
+import NeedAnalysis from '../components/common/NeedAnalysis';
+import EmptyState from '../components/common/EmptyState';
 
 export default function ReportPage() {
   const {
@@ -23,21 +25,35 @@ export default function ReportPage() {
     isGeneratingReport,
     runGenerateReport,
     showToast,
-    activeDatasetName
+    activeDatasetName,
+    hasAnalysis
   } = useAnalysis();
 
   const [downloadDropdown, setDownloadDropdown] = useState(false);
 
+  if (!hasAnalysis) {
+    return (
+      <NeedAnalysis
+        title="No report source yet"
+        description="Analyze a CSV first. The improvement report is built from that batch, not from placeholder copy."
+      />
+    );
+  }
+
   const handleDownload = (format) => {
     setDownloadDropdown(false);
+    if (!report) {
+      showToast('Generate a report first.', 'error');
+      return;
+    }
     if (format === 'print') {
       window.print();
     } else if (format === 'copy') {
-      const summaryText = `Sentix AI Customer Feedback Report\nDataset: ${report.batchName}\nGenerated: ${report.generatedDate}\n\nExecutive Summary:\n${report.summary.executiveSummary}\n\nKey Actions:\n${report.actionRoadmap.map((a, i) => `${i + 1}. [${a.priority} Priority] ${a.issue} -> ${a.suggestedAction}`).join('\n')}`;
+      const summaryText = `Sentix Customer Feedback Report\nDataset: ${report.batchName}\nGenerated: ${report.generatedDate}\n\nExecutive Summary:\n${report.summary.executiveSummary}\n\nKey Actions:\n${report.actionRoadmap.map((a, i) => `${i + 1}. [${a.priority} Priority] ${a.issue} -> ${a.suggestedAction}`).join('\n')}`;
       navigator.clipboard.writeText(summaryText);
-      showToast('Report summary copied to clipboard!', 'success');
+      showToast('Report summary copied to clipboard.', 'success');
     } else {
-      showToast(`Report export initialized (${format.toUpperCase()}). Placeholder ready for backend PDF generator.`, 'info');
+      showToast(`PDF export is not wired yet. Use print or copy summary.`, 'info');
     }
   };
 
@@ -60,7 +76,7 @@ export default function ReportPage() {
             disabled={isGeneratingReport}
           >
             <RefreshCw size={16} className={isGeneratingReport ? 'spin' : ''} />
-            <span>{isGeneratingReport ? 'Synthesizing...' : 'Regenerate Report'}</span>
+            <span>{isGeneratingReport ? 'Synthesizing...' : report ? 'Regenerate Report' : 'Generate Report'}</span>
           </button>
 
           <div style={{ position: 'relative' }}>
@@ -141,7 +157,17 @@ export default function ReportPage() {
                     alignItems: 'center',
                     gap: '0.5rem'
                   }}
-                  onClick={() => handleDownload('json')}
+                  onClick={() => {
+                    if (!report) return;
+                    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${report.batchName || 'report'}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    setDownloadDropdown(false);
+                  }}
                 >
                   <FileCheck size={14} />
                   <span>Raw JSON Export</span>
@@ -157,12 +183,25 @@ export default function ReportPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Sparkles size={16} />
           <span>
-            Mock Intelligence Layer: Demonstrates the exact structure the future LLM/ML backend will deliver.
+            This report is generated from the current upload (keyword issue clusters + sentiment stats).
           </span>
         </div>
-        <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>Status: Simulated Output</span>
+        <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>
+          {report ? 'Ready' : 'Not generated yet'}
+        </span>
       </div>
 
+      {!report && (
+        <EmptyState
+          title="No report generated"
+          description="Click Regenerate Report to build an action roadmap from this batch."
+          actionText={isGeneratingReport ? 'Synthesizing...' : 'Generate report'}
+          onAction={() => runGenerateReport()}
+        />
+      )}
+
+      {report && (
+      <>
       {/* Report Hero Card */}
       <div className="report-hero-card">
         <div className="report-hero-meta">
@@ -350,6 +389,8 @@ export default function ReportPage() {
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

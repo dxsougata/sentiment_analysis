@@ -15,7 +15,7 @@ import {
 import { useAnalysis } from '../hooks/useAnalysis';
 import { formatFileSize } from '../utils/formatters';
 import { parseCSV } from '../utils/csvParser';
-import { getSampleDataset } from '../services/api';
+import { getSampleDatasetFile } from '../services/api';
 
 export default function UploadPage() {
   const navigate = useNavigate();
@@ -31,7 +31,7 @@ export default function UploadPage() {
   const fileInputRef = useRef(null);
 
   // Supported extensions
-  const ALLOWED_EXTENSIONS = ['.csv', '.xlsx', '.xls'];
+  const ALLOWED_EXTENSIONS = ['.csv'];
 
   const validateAndSetFile = (file) => {
     setFileError(null);
@@ -43,7 +43,7 @@ export default function UploadPage() {
     const isValid = ALLOWED_EXTENSIONS.some((ext) => fileName.endsWith(ext));
 
     if (!isValid) {
-      setFileError('Unsupported file format. Please upload a .csv, .xlsx, or .xls file.');
+      setFileError('Please upload a .csv file. Excel is not supported yet.');
       setSelectedFile(null);
       setPreviewRows(null);
       return;
@@ -67,8 +67,9 @@ export default function UploadPage() {
       };
       reader.readAsText(file.slice(0, 50000)); // Read first 50KB for fast preview
     } else {
-      // For Excel files, show sample preview format
-      applySamplePreview();
+      setFileError('Excel files are not supported yet. Export as CSV and try again.');
+      setSelectedFile(null);
+      setPreviewRows(null);
     }
   };
 
@@ -116,15 +117,13 @@ export default function UploadPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleLoadSample = () => {
-    const sample = getSampleDataset();
-    const fakeFile = new File(['mock content'], sample.name, {
-      type: 'text/csv'
-    });
-    setSelectedFile(fakeFile);
-    applySamplePreview();
-    setFileError(null);
-    setAnalysisComplete(false);
+  const handleLoadSample = async () => {
+    try {
+      const sampleFile = await getSampleDatasetFile();
+      validateAndSetFile(sampleFile);
+    } catch (err) {
+      setFileError(err.message || 'Could not load the sample CSV.');
+    }
   };
 
   const handleAnalyze = async () => {

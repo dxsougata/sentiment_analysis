@@ -6,6 +6,8 @@ class ReviewPrediction(BaseModel):
     positive_probability: float
     negative_probability: float
     sentiment: str
+    date: Optional[str] = None
+    rating: Optional[str] = None
 
 class ProductSummary(BaseModel):
     product_id: str
